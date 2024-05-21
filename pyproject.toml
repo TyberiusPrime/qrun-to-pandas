@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "qrun_to_pandas"
-version = "0.0.1"
+version = "0.1.0"
 description = "Read Quantabio QRun formated files into pandas dataframes"
 authors = ["Florian Finkernagel <ffinkernagel@imt.uni-marburg.de>"]
 repository = "https://github.com/TyberiusPrime/qrun-to-pandas"
