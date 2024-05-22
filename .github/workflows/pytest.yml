@@ -11,24 +11,33 @@ jobs:
     strategy:
       max-parallel: 2
       matrix:
-        python-version: ["3.12", "3.11", "3.10", "3.9"]
+        python-version: ["3.12"]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v3
+      - name: Install and configure Poetry  # This could be cached, too...
+        uses: snok/install-poetry@v1.3.3
+        with:
+          version: 1.7.1
+          virtualenvs-in-project: true
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v3
+        uses: actions/setup-python@v4
         with:
           python-version: ${{ matrix.python-version }}
+      - name: Load cached venv
+        id: cached-poetry-dependencies
+        uses: actions/cache@v3
+        with:
+          path: .venv
+          key: venv-${{ runner.os }}-${{ matrix.python-version }}-${{ hashFiles('**/poetry.lock') }}
       - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          # pip does not read our setup.cfg...
-          python -c "import configparser; c = configparser.ConfigParser(); c.read('setup.cfg'); print(c['options.extras_require']['testing'])" | xargs pip install
-          pip install -e .
-
+        run: poetry install --with "dev"
+        if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
       - name: test with pytest
-        run: pytest
+        run: 
+          source $VENV
+          pytest
 
   build_sdist:
     name: Build source distribution
@@ -40,9 +49,14 @@ jobs:
         name: Install Python
         with:
           python-version: '3.11'
+      - name: Install and configure Poetry  # This could be cached, too...
+        uses: snok/install-poetry@v1.3.3
+        with:
+          version: 1.7.1
+          virtualenvs-in-project: true
 
       - name: Build sdist
-        run: python setup.py sdist
+        run: poetry build
 
       - uses: actions/upload-artifact@v4
         with:
