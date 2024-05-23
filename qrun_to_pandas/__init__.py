@@ -6,7 +6,7 @@ import pandas as pd
 __version__ = "0.1.0"
 
 
-def extract_sample_data(filename, fields=["Well", "Name", "Colour"]):
+def extract_sample_data(filename, fields=["Well", "Name", "Colour", "Assay"]):
     """Exract the sample information"""
     tree = ET.parse(filename)
     sd = tree.find("SampleData").find("Samples").findall("Sample")
@@ -14,7 +14,11 @@ def extract_sample_data(filename, fields=["Well", "Name", "Colour"]):
     result = collections.defaultdict(list)
     for sample in sd:
         for field in fields:
-            result[field].append(sample.find(field).text)
+            try:
+                value = sample.find(field).text
+            except AttributeError:
+                value = ""
+            result[field].append(value)
     return pd.DataFrame(result)
 
 
@@ -67,7 +71,7 @@ def extract_run_dates(filename):
 
 
 def extract_assays(filename):
-    """Retrieve all the assys included in the qrun file""" 
+    """Retrieve all the assys included in the qrun file"""
     tree = ET.parse(filename)
     assays = tree.find("Assays").findall("Assay")
     res = collections.defaultdict(list)
@@ -96,15 +100,23 @@ def parse_trace(input: str, column_name_x: str, column_name_y: str):
     return res
 
 
-def build_annotated_curve(datasets, kind, sample_info, step_id_to_assay_info):
+def build_annotated_curve(datasets, kind, sample_info, assays):
     """Anotate the datasets with AssayNam and AssayTargets"""
     curve = datasets[kind]["traces"].merge(sample_info, on="Well")
     step_id = datasets[kind]["step_id"]
-    assay_info = step_id_to_assay_info[step_id]
+    at = assays.transpose()
     return curve.assign(
-        AssayName=assay_info["Name"],
-        AssayTargets=assay_info["Targets"],
-    )
+        AssayName=[
+            at.get(assay, {}).get("Name", "")
+            for assay in curve["Assay"]
+        ],
+
+        AssayTargets=[
+            at.get(assay, {}).get("Targets", "")
+            for assay in curve["Assay"]
+        ],
+        #AssayTargets=assay_info["Targets"],
+    ).drop(columns=["Assay"])
 
 
 def extract_annotated(filename) -> dict[str, pd.DataFrame | datetime.datetime]:
@@ -122,14 +134,14 @@ def extract_annotated(filename) -> dict[str, pd.DataFrame | datetime.datetime]:
     start_date, end_date = extract_run_dates(filename)
 
     melt_curve = build_annotated_curve(
-        datasets, "Melt", sample_info, step_id_to_assay_info
+        datasets, "Melt", sample_info, assays
     )
-    melt_curve = melt_curve.assign(Color = melt_curve['Colour']).drop(columns=['Colour'])
+    melt_curve = melt_curve.assign(Color=melt_curve["Colour"]).drop(columns=["Colour"])
     amp_curve = build_annotated_curve(
-        datasets, "Cycling", sample_info, step_id_to_assay_info
+        datasets, "Cycling", sample_info, assays
     )
-    amp_curve = amp_curve.assign(Cycle = amp_curve['Cycle'].astype(int) + 1)
-    amp_curve = amp_curve.assign(Color = amp_curve['Colour']).drop(columns=['Colour'])
+    amp_curve = amp_curve.assign(Cycle=amp_curve["Cycle"].astype(int) + 1)
+    amp_curve = amp_curve.assign(Color=amp_curve["Colour"]).drop(columns=["Colour"])
 
     return {
         "melt_curve": melt_curve,
